@@ -2,6 +2,7 @@ from simulator import Simulator
 from agent import Agent
 from env import MujocoEnv
 
+import numpy as np
 import wandb
 
 # load environment
@@ -27,7 +28,10 @@ for iteration in range(100):
             episode_history.append((timestep, action))
         
         experience_history.append(episode_history)
-        wandb.log({"reward": sum([(timestep.reward or 0.) for timestep, _ in episode_history])}, step=iteration)
+    rewards = [
+        sum([(timestep.reward or 0.) for timestep, _ in episode_history])
+    ]
+    wandb.log({"avg_reward": np.mean(rewards)})
     
     # train simulator
     simulator.fit(experience_history)

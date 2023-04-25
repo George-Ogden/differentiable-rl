@@ -1,11 +1,12 @@
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+import torch.nn.functional as F
 import torch.optim as optim
 
 @dataclass
 class TrainingConfig:
-    training_epochs: int = 20
+    epochs: int = 20
     """number of epochs to train each model for"""
     batch_size: int = 64
     """training batch size"""
@@ -19,11 +20,15 @@ class TrainingConfig:
     optimizer_type: str = "Adam"
     metrics: List[str] = field(default_factory=lambda: ["mae"])
 
-    @property
     def optimizer(self, parameters) -> optim.Optimizer:
         """optimizer to use for training"""
         optimizer_class = getattr(optim, self.optimizer_type)
-        return optimizer_class(self.optimizer_type)(
+        return optimizer_class(
             params=parameters,
-            learning_rate=self.lr
+            lr=self.lr
         )
+
+    @property
+    def loss_fn(self):
+        """loss function to use for training"""
+        return getattr(F, f"{self.loss}_loss")
