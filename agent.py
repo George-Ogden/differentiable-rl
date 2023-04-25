@@ -4,6 +4,11 @@ import torch
 
 from typing import Union
 from env import EnvInteractor, EnvSpec
+from simulator import Simulator
+from training import TrainingConfig
+
+from tqdm import trange
+import wandb
 
 class Agent(nn.Module, EnvInteractor):
     def __init__(self, env_spec: EnvSpec):
@@ -49,3 +54,30 @@ class Agent(nn.Module, EnvInteractor):
         if numpy:
             actions = actions.detach().cpu().numpy()
         return actions
+
+    def learn(
+        self,
+        simulator: Simulator,
+        training_config: TrainingConfig=TrainingConfig(),
+    ):
+        """train the agent on the simulator"""
+        simulator.eval()
+        self.train()
+        optimizer = training_config.optimizer(self.parameters())
+
+        for epoch in trange(training_config.epochs, desc="Practising in simulator"):
+            optimizer.zero_grad()
+            # reset the simulator
+            observations = simulator.reset(training_config.batch_size)
+            total_reward = 0.
+            for _ in range(200):
+                # sample actions
+                actions = self(observations)
+                observations, rewards = simulator.step(actions)
+                total_reward += rewards.mean()
+            # update agent
+            loss = -total_reward
+            loss.backward()
+            optimizer.step()
+
+            wandb.log({"sim_reward": total_reward.item()})

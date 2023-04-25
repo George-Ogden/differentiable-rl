@@ -10,7 +10,7 @@ from typing import Optional, List, Tuple
 from training import TrainingConfig
 from dm_env import TimeStep
 from env import EnvSpec
-from tqdm import tqdm
+from tqdm import trange
 
 import wandb
 
@@ -41,11 +41,68 @@ class Simulator(nn.Module, EnvInteractor):
         )
         # store initial states that have been encountered in the past
         self.initial_observations = []
+        self.device = torch.device("cpu")
 
     def prepare(self, *data):
         """convert data to tensors"""
         # convert to numpy array first for speedup
         return (torch.tensor(np.array(d)).float() for d in data)
+
+    def to(self, device: torch.device):
+        # store the device
+        self.device = device
+        return super().to(device)
+
+    def reset(self, batch_size: int=1) -> torch.Tensor:
+        """reset the simulator to a random initial state
+
+        Args:
+            batch_size (int, optional): number of parallel simulations to run. Defaults to 1.
+
+        Returns:
+            torch.Tensor: observation
+        """
+        # RNN backward can only be called in training mode
+        self._rnn.train()
+
+        # pick random starting states
+        starting_states = torch.tensor(
+            np.array([
+                self.initial_observations[
+                    np.random.randint(len(self.initial_observations))
+                ] for _ in range(batch_size)
+            ]),
+            device=self.device,
+            dtype=torch.float32
+        )
+        # encode the starting states
+        self._hidden_states = self._state_encoder(starting_states).unsqueeze(0)
+        return starting_states
+
+    def step(self, actions: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        """advance the simulation
+
+        Args:
+            actions (torch.Tensor): agent's actions
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: observations and rewards from the environment
+        """
+        # encode actions
+        actions = actions.to(self.device)
+        actions = actions.reshape(-1, self._action_size)
+        action_encodings = self._action_encoder(actions)
+        action_encodings = action_encodings.unsqueeze(1)
+
+        # pass through RNN
+        output_states, self._hidden_states = self._rnn(action_encodings, self._hidden_states)
+
+        # decode outputs
+        output_states = output_states.reshape(-1, output_states.shape[-1])
+        predicted_observations = self._state_decoder(output_states)
+        predicted_rewards = self._reward_decoder(output_states).squeeze(-1)
+
+        return predicted_observations, predicted_rewards
 
     def forward(
         self,
@@ -62,6 +119,8 @@ class Simulator(nn.Module, EnvInteractor):
             Tuple[torch.Tensor, torch.Tensor]: states and rewards
         """
         batch_shape = actions.shape[:-1]
+        initial_observations = initial_observations.to(self.device)
+        actions = actions.to(self.device)
 
         # encode inputs
         hidden_states = self._state_encoder(initial_observations).unsqueeze(0)
@@ -128,17 +187,23 @@ class Simulator(nn.Module, EnvInteractor):
             val_dataset, batch_size=training_config.batch_size, shuffle=False
         )
 
-        for epoch in range(training_config.epochs):
+        for epoch in trange(training_config.epochs, desc="Improving simulator"):
             self.train()
             train_loss = 0.
-            for initial_observations, actions, observations, rewards in tqdm(train_dataloader, desc=f"Training {epoch:02}"):
+            for initial_observations, actions, observations, rewards in train_dataloader:
                 # train on batch
                 optimiser.zero_grad()
 
                 predicted_observations, predicted_rewards = self(initial_observations, actions)
 
                 # calculate loss
-                loss = loss_fn(predicted_observations, observations) + loss_fn(predicted_rewards, rewards)
+                loss = loss_fn(
+                    predicted_observations,
+                    observations.to(predicted_observations.device)
+                ) + loss_fn(
+                    predicted_rewards,
+                    rewards.to(predicted_rewards.device)
+                )
                 train_loss += loss.item()
                 loss.backward()
 
@@ -148,11 +213,17 @@ class Simulator(nn.Module, EnvInteractor):
             val_loss = 0.
             self.eval()
             with torch.no_grad():
-                for initial_observations, actions, observations, rewards in tqdm(val_dataloader, desc=f"Validating {epoch:02}"):
+                for initial_observations, actions, observations, rewards in val_dataloader:
                     # validate on batch
                     predicted_observations, predicted_rewards = self(initial_observations, actions)
 
-                    loss = loss_fn(predicted_observations, observations) + loss_fn(predicted_rewards, rewards)
+                    loss = loss_fn(
+                        predicted_observations,
+                        observations.to(predicted_observations.device)
+                    ) + loss_fn(
+                        predicted_rewards,
+                        rewards.to(predicted_rewards.device)
+                    )
                     val_loss += loss.item()
             val_loss /= len(val_dataloader)
             wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})

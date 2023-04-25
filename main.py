@@ -8,13 +8,14 @@ import wandb
 # load environment
 env = MujocoEnv("cartpole", "swingup")
 # create agent
-agent = Agent(env.spec).to("cuda").eval()
+agent = Agent(env.spec).to("cuda")
 # create simulator
-simulator = Simulator(env.spec)
+simulator = Simulator(env.spec).to("cuda")
 
 wandb.init(project="simulator")
 
 for iteration in range(100):
+    agent.eval()
     # gather experience using agent
     experience_history = []
     for episode in range(10):
@@ -31,7 +32,8 @@ for iteration in range(100):
     rewards = [
         sum([(timestep.reward or 0.) for timestep, _ in episode_history])
     ]
-    wandb.log({"avg_reward": np.mean(rewards)})
+    wandb.log({"env_reward": np.mean(rewards)})
     
     # train simulator
     simulator.fit(experience_history)
+    agent.learn(simulator)
