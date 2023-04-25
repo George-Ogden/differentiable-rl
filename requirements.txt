@@ -1,0 +1,6 @@
+dm_control
+dm_env
+numpy
+torch
+tqdm
+wandb
