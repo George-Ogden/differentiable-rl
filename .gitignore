@@ -1,0 +1,10 @@
+# cache files
+__pycache__/
+*.py[cod]
+
+# logs
+*.json
+*.log
+*.wandb
+*.yaml
+wandb/
