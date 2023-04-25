@@ -1,18 +1,16 @@
-import torch.nn.functional as F
 import torch.utils.data as data
 import torch.nn as nn
 import numpy as np
 import torch
 
-from env import EnvInteractor
+from tqdm import trange
+import wandb
 
 from typing import Optional, List, Tuple
-from training import TrainingConfig
 from dm_env import TimeStep
-from env import EnvSpec
-from tqdm import trange
 
-import wandb
+from .utils.training_config import TrainingConfig
+from .env import EnvInteractor, EnvSpec
 
 class Simulator(nn.Module, EnvInteractor):
     """a game that uses an RNN to predict the next state and reward"""

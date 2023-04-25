@@ -1,6 +1,6 @@
 from dm_control import viewer
 
-from env import MujocoEnv
+from src.env import MujocoEnv
 
 import torch
 

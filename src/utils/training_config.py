@@ -1,8 +1,8 @@
-from dataclasses import dataclass, field
-from typing import List, Optional
-
 import torch.nn.functional as F
 import torch.optim as optim
+
+from dataclasses import dataclass, field
+from typing import List, Optional
 
 @dataclass
 class TrainingConfig:

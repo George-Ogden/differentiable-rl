@@ -1,6 +1,6 @@
-from simulator import Simulator
-from agent import Agent
-from env import MujocoEnv
+from src.simulator import Simulator
+from src.agent import Agent
+from src.env import MujocoEnv
 
 import numpy as np
 import torch
@@ -23,18 +23,18 @@ for iteration in range(5):
         episode_history = []
         timestep = env.reset()
         episode_history.append((timestep, None))
-        
+
         while not timestep.last():
             action = agent(timestep.observation)
             timestep = env.step(action)
             episode_history.append((timestep, action))
-        
+
         experience_history.append(episode_history)
     rewards = [
         sum([(timestep.reward or 0.) for timestep, _ in episode_history])
     ]
     wandb.log({"env_reward": np.mean(rewards)})
-    
+
     # train simulator
     simulator.fit(experience_history)
     agent.learn(simulator)
