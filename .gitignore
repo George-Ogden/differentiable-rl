@@ -8,3 +8,8 @@ __pycache__/
 *.wandb
 *.yaml
 wandb/
+
+# model artifacts
+*.pt
+*.pth
+*.pkl
