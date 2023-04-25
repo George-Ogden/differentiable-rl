@@ -3,6 +3,7 @@ from agent import Agent
 from env import MujocoEnv
 
 import numpy as np
+import torch
 import wandb
 
 # load environment
@@ -14,7 +15,7 @@ simulator = Simulator(env.spec).to("cuda")
 
 wandb.init(project="simulator")
 
-for iteration in range(100):
+for iteration in range(5):
     agent.eval()
     # gather experience using agent
     experience_history = []
@@ -37,3 +38,4 @@ for iteration in range(100):
     # train simulator
     simulator.fit(experience_history)
     agent.learn(simulator)
+    torch.save(agent, "agent.pth")
