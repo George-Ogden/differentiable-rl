@@ -65,3 +65,14 @@ def test_valid_observations_are_valid():
 
     assert env.get_observation().dtype == env.spec.observation_spec.dtype
     env.validate_observation(env.get_observation())
+
+def test_clone():
+    env.reset()
+    for _ in range(env.max_round):
+        action = np.random.uniform(env.spec.action_spec.minimum, env.spec.action_spec.maximum)
+        expected_timestep = env.clone().step(action)
+        timestep = env.step(action)
+        assert timestep.step_type == expected_timestep.step_type
+        assert (timestep.observation == expected_timestep.observation).all()
+        assert timestep.reward == expected_timestep.reward
+        assert timestep.discount == expected_timestep.discount
