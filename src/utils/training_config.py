@@ -4,8 +4,10 @@ import torch.optim as optim
 from dataclasses import dataclass, field
 from typing import List, Optional
 
+from .config import Config
+
 @dataclass
-class TrainingConfig:
+class TrainingConfig(Config):
     epochs: int = 20
     """number of epochs to train each model for"""
     batch_size: int = 64

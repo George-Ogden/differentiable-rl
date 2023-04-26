@@ -59,9 +59,6 @@ class Env(metaclass=ABCMeta):
             discount=None
         )
 
-    def clone(self) -> "Self":
-        return deepcopy(self)
-
     def get_symmetries(self, observation: np.ndarray, action: np.ndarray, reward: float) -> List[Tuple[int, np.ndarray, np.ndarray, float]]:
         return Env.no_symmetries(observation, action, reward)
 

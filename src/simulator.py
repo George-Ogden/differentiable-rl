@@ -7,35 +7,45 @@ from tqdm import trange
 import wandb
 
 from typing import Optional, List, Tuple
+from dataclasses import dataclass
 from dm_env import TimeStep
 
-from .utils.training_config import TrainingConfig
+from .utils import Config, TrainingConfig
 from .env import EnvInteractor, EnvSpec
+
+@dataclass
+class SimulatorConfig(Config):
+    """configuration for the simulator"""
+    hidden_size: int = 64
 
 class Simulator(nn.Module, EnvInteractor):
     """a game that uses an RNN to predict the next state and reward"""
-    def __init__(self, env_spec: EnvSpec):
+    def __init__(self, env_spec: EnvSpec, config: SimulatorConfig=SimulatorConfig()):
         super().__init__()
         self.setup_spec(env_spec)
 
+        # create the network
+        hidden_size = config.hidden_size
         self._state_encoder = torch.nn.Sequential(
             nn.BatchNorm1d(self._observation_size),
-            nn.Linear(self._observation_size, 64),
+            nn.Linear(self._observation_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(hidden_size, hidden_size),
         )
         self._action_encoder = torch.nn.Sequential(
             nn.BatchNorm1d(self._action_size),
-            nn.Linear(self._action_size, 64),
+            nn.Linear(self._action_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(64, 64),
+            nn.Linear(hidden_size, hidden_size),
         )
-        self._rnn = nn.GRU(64, 64, batch_first=True)
+        self._rnn = nn.GRU(hidden_size, hidden_size, batch_first=True)
         self._reward_decoder = torch.nn.Sequential(
-            nn.Linear(64, 1),
+            nn.Linear(hidden_size, 1),
+            nn.Sigmoid(),
         )
         self._state_decoder = torch.nn.Sequential(
-            nn.Linear(64, self._observation_size),
+            nn.Linear(hidden_size, self._observation_size),
+            nn.Sigmoid(),
         )
         # store initial states that have been encountered in the past
         self.initial_observations = []
@@ -133,6 +143,7 @@ class Simulator(nn.Module, EnvInteractor):
         output_states = output_states.reshape(-1, output_states.shape[-1])
         predicted_observations = self._state_decoder(output_states)
         predicted_observations = predicted_observations.reshape(*batch_shape, *self._observation_shape)
+        predicted_observations = predicted_observations * torch.diff(self._observation_range, dim=0).squeeze(0) + self._observation_range[0]
         predicted_rewards = self._reward_decoder(output_states).squeeze(-1)
         predicted_rewards = predicted_rewards.reshape(*batch_shape)
         return predicted_observations, predicted_rewards
