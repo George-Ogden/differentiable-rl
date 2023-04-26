@@ -14,12 +14,13 @@ class TrainingConfig(Config):
     """training batch size"""
     training_patience: Optional[int] = 7
     """number of epochs without improvement during training (0 to ignore)"""
-    lr: float = 1e-2
+    lr: float = 1e-3
     """model learning rate"""
     validation_split: float = 0.1
     """proportion of data to validate on"""
     loss: str = "mse"
     optimizer_type: str = "Adam"
+    weight_decay: float = 1e-5
     metrics: List[str] = field(default_factory=lambda: ["mae"])
 
     def optimizer(self, parameters) -> optim.Optimizer:
@@ -27,7 +28,8 @@ class TrainingConfig(Config):
         optimizer_class = getattr(optim, self.optimizer_type)
         return optimizer_class(
             params=parameters,
-            lr=self.lr
+            lr=self.lr,
+            weight_decay=self.weight_decay
         )
 
     @property

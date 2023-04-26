@@ -85,13 +85,14 @@ class Agent(nn.Module, EnvInteractor):
             # reset the simulator
             observations = simulator.reset(training_config.batch_size)
             total_reward = 0.
-            for _ in range(MujocoEnv.time_limit // MujocoEnv.timestep):
+            num_steps = int(MujocoEnv.time_limit / MujocoEnv.timestep)
+            for _ in range(num_steps):
                 # sample actions
                 actions = self(observations)
                 observations, rewards = simulator.step(actions)
                 total_reward += rewards.mean()
             # update agent
-            loss = -total_reward
+            loss = -total_reward / num_steps
             loss.backward()
             optimizer.step()
 

@@ -196,6 +196,7 @@ class Simulator(nn.Module, EnvInteractor):
             val_dataset, batch_size=training_config.batch_size, shuffle=False
         )
 
+        best_val_loss = float("inf")
         for epoch in trange(training_config.epochs, desc="Improving simulator"):
             self.train()
             train_loss = 0.
@@ -235,4 +236,10 @@ class Simulator(nn.Module, EnvInteractor):
                     )
                     val_loss += loss.item()
             val_loss /= len(val_dataloader)
+            # save best model to temporary location
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                torch.save(self.state_dict(), "/tmp/best_model.pt")
             wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+        # load best model
+        self.load_state_dict(torch.load("/tmp/best_model.pt"))
