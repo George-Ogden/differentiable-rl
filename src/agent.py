@@ -16,6 +16,7 @@ from .simulator import Simulator
 class AgentConfig(Config):
     """configuration for the agent"""
     hidden_size: int = 64
+    dropout: float = 0.1
 
 class Agent(nn.Module, EnvInteractor):
     def __init__(
@@ -31,6 +32,7 @@ class Agent(nn.Module, EnvInteractor):
             nn.BatchNorm1d(self._observation_size),
             nn.Linear(self._observation_size, config.hidden_size),
             nn.ReLU(),
+            nn.Dropout(config.dropout),
             nn.Linear(config.hidden_size, self._action_size),
             nn.Sigmoid(),
         )
@@ -51,7 +53,8 @@ class Agent(nn.Module, EnvInteractor):
 
         # normalize the observation
         if self._observation_range:
-            observation = (observation - self._observation_range[1]) / torch.diff(self._observation_range, dim=0).squeeze(0)
+            # scale the observation to [-1, 1]
+            observation = (observation - self._observation_range[1]) / torch.diff(self._observation_range, dim=0).squeeze(0) * 2 - 1
 
         # flatten the observation
         batch_shape = observation.shape[:-len(self._observation_shape)]
