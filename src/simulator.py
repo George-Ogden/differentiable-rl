@@ -45,7 +45,6 @@ class Simulator(nn.Module, EnvInteractor):
         )
         self._state_decoder = torch.nn.Sequential(
             nn.Linear(hidden_size, self._observation_size),
-            nn.Sigmoid(),
         )
         # store initial states that have been encountered in the past
         self.initial_observations = []
@@ -143,7 +142,8 @@ class Simulator(nn.Module, EnvInteractor):
         output_states = output_states.reshape(-1, output_states.shape[-1])
         predicted_observations = self._state_decoder(output_states)
         predicted_observations = predicted_observations.reshape(*batch_shape, *self._observation_shape)
-        predicted_observations = predicted_observations * torch.diff(self._observation_range, dim=0).squeeze(0) + self._observation_range[0]
+        if self._observation_range is not None:
+            predicted_observations = F.sigmoid(predicted_observations) * torch.diff(self._observation_range, dim=0).squeeze(0) + self._observation_range[0]
         predicted_rewards = self._reward_decoder(output_states).squeeze(-1)
         predicted_rewards = predicted_rewards.reshape(*batch_shape)
         return predicted_observations, predicted_rewards

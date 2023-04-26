@@ -1,6 +1,4 @@
 import numpy as np
-import pytest
-import torch
 
 from src.env import MujocoEnv
 from src.agent import Agent

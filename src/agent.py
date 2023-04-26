@@ -16,7 +16,7 @@ from .simulator import Simulator
 class AgentConfig(Config):
     """configuration for the agent"""
     hidden_size: int = 64
-    dropout: float = 0.1
+    dropout: float = .1
 
 class Agent(nn.Module, EnvInteractor):
     def __init__(

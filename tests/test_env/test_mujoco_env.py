@@ -1,4 +1,3 @@
-from dm_env import StepType
 import numpy as np
 
 import pytest
