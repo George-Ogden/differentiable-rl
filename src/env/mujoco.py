@@ -1,5 +1,6 @@
 from dm_control.rl.control import Environment, flatten_observation, FLAT_OBSERVATION_KEY
 from dm_control import suite
+from copy import copy
 import numpy as np
 
 from .spec import EnvSpec
@@ -44,3 +45,10 @@ class MujocoEnv(Env):
         if display:
             print(timestep)
         return (timestep.reward or 0)
+
+    def clone(self) -> "Self":
+        # reduce memory by only copying the parts that change
+        clone = copy(self)
+        clone.env = copy(self.env)
+        clone.env._physics = self.env._physics.copy(share_model=True)
+        return clone

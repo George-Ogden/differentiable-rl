@@ -82,3 +82,6 @@ class Env(metaclass=ABCMeta):
 
     def get_random_move(self):
         return np.random.uniform(low=self.spec.action_spec.minimum, high=self.spec.action_spec.maximum)
+    
+    def clone(self):
+        return deepcopy(self)
