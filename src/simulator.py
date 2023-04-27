@@ -1,3 +1,4 @@
+import torch.nn.functional as F
 import torch.utils.data as data
 import torch.nn as nn
 import numpy as np
@@ -235,9 +236,9 @@ class Simulator(nn.Module, EnvInteractor):
                         rewards.to(predicted_rewards.device)
                     )
                     val_loss += loss.item()
-            val_loss /= len(val_dataloader)
+            val_loss /= len(val_dataloader) or 1.
             # save best model to temporary location
-            if val_loss < best_val_loss:
+            if val_loss <= best_val_loss:
                 best_val_loss = val_loss
                 torch.save(self.state_dict(), "/tmp/best_model.pt")
             wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})

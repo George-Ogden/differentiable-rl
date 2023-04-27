@@ -9,11 +9,8 @@ from .config import Config
 @dataclass
 class TrainingConfig(Config):
     epochs: int = 20
-    """number of epochs to train each model for"""
     batch_size: int = 64
     """training batch size"""
-    training_patience: Optional[int] = 7
-    """number of epochs without improvement during training (0 to ignore)"""
     lr: float = 1e-3
     """model learning rate"""
     validation_split: float = 0.1
@@ -21,7 +18,6 @@ class TrainingConfig(Config):
     loss: str = "mse"
     optimizer_type: str = "Adam"
     weight_decay: float = 1e-5
-    metrics: List[str] = field(default_factory=lambda: ["mae"])
 
     def optimizer(self, parameters) -> optim.Optimizer:
         """optimizer to use for training"""
