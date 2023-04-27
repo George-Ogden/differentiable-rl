@@ -7,6 +7,7 @@ from .spec import EnvSpec
 
 class EnvInteractor:
     def setup_spec(self, spec: EnvSpec):
+        self.spec = spec
         assert isinstance(self, nn.Module), "EnvInteractor must be a nn.Module"
         # store the observation and action specs
         self._observation_spec = spec.observation_spec

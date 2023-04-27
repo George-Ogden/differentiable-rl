@@ -29,6 +29,7 @@ class CoachConfig(Config):
     """directory to save logs, model, files, etc. to"""
     sub_directories: str = "iteration-{iteration:04}"
     best_checkpoint_path: str = "best"
+    max_buffer_size: int = 1000
     agent_config: AgentConfig = field(default_factory=AgentConfig)
     simulator_config: SimulatorConfig = field(default_factory=SimulatorConfig)
     training_config: TrainingConfig = field(default_factory=TrainingConfig)
@@ -58,13 +59,15 @@ class Coach:
         
         self.training_config = config.training_config
         self.simulator_epochs = config.simulator_epochs
+        self.max_buffer_size = config.max_buffer_size
 
     def run(self):
         self.agent.eval()
         self.save_agent(0)
         self.save_simulator(0)
-        experience_history = []
+        training_buffer = []
         for iteration in range(self.num_iterations):
+            experience_history = []
             # gather experience using agent
             for episode in trange(self.agent_env_experiences, desc="Collecting experience in environment"):
                 episode_history = []
@@ -77,14 +80,20 @@ class Coach:
                     episode_history.append((timestep, action))
 
                 experience_history.append(episode_history)
+            training_buffer.extend(experience_history)
             rewards = [
-                sum([(timestep.reward or 0.) for timestep, _ in episode_history])
+                sum([
+                    (timestep.reward or 0.)
+                    for timestep, _ in episode_history
+                ])
+                for episode_history in experience_history
             ]
-            wandb.log({"env_reward": np.mean(rewards)})
+            wandb.log({"env_reward": np.mean(rewards) / self.env.max_round})
 
             # train simulator
             self.training_config.epochs = self.simulator_epochs
-            self.simulator.fit(experience_history, training_config=self.training_config)
+            training_buffer = training_buffer[-self.max_buffer_size:]
+            self.simulator.fit(training_buffer, training_config=self.training_config)
             self.save_simulator(iteration + 1)
 
             # train agent
@@ -104,7 +113,7 @@ class Coach:
                     timestep = env.step(action)
                     total_reward += timestep.reward or 0.
                 rewards.append(total_reward)
-                wandb.log({"eval_reward": np.mean(total_reward)})
+            wandb.log({"eval_reward": np.mean(rewards) / env.max_round})
             
             # save best model
             if np.mean(rewards) > self.best_reward:

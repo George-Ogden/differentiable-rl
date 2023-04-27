@@ -1,3 +1,4 @@
+import torch.nn.functional as F
 import torch.nn as nn
 import numpy as np
 import torch
@@ -17,6 +18,7 @@ class AgentConfig(Config):
     """configuration for the agent"""
     hidden_size: int = 64
     dropout: float = .1
+    similarity_coeff: float = 1.
 
 class Agent(nn.Module, EnvInteractor):
     def __init__(
@@ -38,6 +40,8 @@ class Agent(nn.Module, EnvInteractor):
         )
         self.device = torch.device("cpu")
         self.eval()
+
+        self.similarity_coeff = config.similarity_coeff
 
     def to(self, device: torch.device):
         # store the device
@@ -80,20 +84,30 @@ class Agent(nn.Module, EnvInteractor):
         self.train()
         optimizer = training_config.optimizer(self.parameters())
 
+        # create a target model
+        target_model = Agent(self.spec).to(self.device)
+        target_model.load_state_dict(self.state_dict())
+        target_model.eval()
+
         for epoch in trange(training_config.epochs, desc="Practising in simulator"):
             optimizer.zero_grad()
             # reset the simulator
             observations = simulator.reset(training_config.batch_size)
             total_reward = 0.
             num_steps = int(MujocoEnv.time_limit / MujocoEnv.timestep)
+            divergence_loss = 0.
             for _ in range(num_steps):
                 # sample actions
                 actions = self(observations)
+                with torch.no_grad():
+                    target_actions = target_model(observations)
                 observations, rewards = simulator.step(actions)
+                divergence_loss += F.mse_loss(actions, target_actions)
                 total_reward += rewards.mean()
             # update agent
-            loss = -total_reward / num_steps
+            loss = -total_reward / num_steps + divergence_loss * self.similarity_coeff
             loss.backward()
+
             optimizer.step()
 
-            wandb.log({"sim_reward": total_reward.item()})
+            wandb.log({"sim_reward": total_reward.item() / num_steps})

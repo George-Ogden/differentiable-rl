@@ -19,6 +19,7 @@ class SimulatorConfig(Config):
     """configuration for the simulator"""
     hidden_size: int = 64
     dropout: float = .1
+    discount: float = .9
 
 class Simulator(nn.Module, EnvInteractor):
     """a game that uses an RNN to predict the next state and reward"""
@@ -56,6 +57,7 @@ class Simulator(nn.Module, EnvInteractor):
         # store initial states that have been encountered in the past
         self.initial_observations = []
         self.device = torch.device("cpu")
+        self.discount = config.discount
 
     def prepare(self, *data):
         """convert data to tensors"""
@@ -110,6 +112,7 @@ class Simulator(nn.Module, EnvInteractor):
 
         # pass through RNN
         output_states, self._hidden_states = self._rnn(action_encodings, self._hidden_states)
+        self._hidden_states = self._hidden_states.detach() * (1 - self.discount) + self._hidden_states * self.discount
 
         # decode outputs
         output_states = output_states.reshape(-1, output_states.shape[-1])
