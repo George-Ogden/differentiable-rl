@@ -1,6 +1,7 @@
 dm_control
 dm_env
 numpy
+simple-parsing
 torch
 tqdm
 wandb
