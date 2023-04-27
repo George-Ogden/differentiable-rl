@@ -18,6 +18,7 @@ from .env import EnvInteractor, EnvSpec
 class SimulatorConfig(Config):
     """configuration for the simulator"""
     hidden_size: int = 64
+    dropout: float = .1
 
 class Simulator(nn.Module, EnvInteractor):
     """a game that uses an RNN to predict the next state and reward"""
@@ -27,24 +28,29 @@ class Simulator(nn.Module, EnvInteractor):
 
         # create the network
         hidden_size = config.hidden_size
+        dropout = config.dropout
         self._state_encoder = torch.nn.Sequential(
             nn.BatchNorm1d(self._observation_size),
             nn.Linear(self._observation_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
+            nn.Dropout(dropout)
         )
         self._action_encoder = torch.nn.Sequential(
             nn.BatchNorm1d(self._action_size),
             nn.Linear(self._action_size, hidden_size),
             nn.ReLU(),
             nn.Linear(hidden_size, hidden_size),
+            nn.Dropout(dropout)
         )
         self._rnn = nn.GRU(hidden_size, hidden_size, batch_first=True)
         self._reward_decoder = torch.nn.Sequential(
+            nn.Dropout(dropout),
             nn.Linear(hidden_size, 1),
             nn.Sigmoid(),
         )
         self._state_decoder = torch.nn.Sequential(
+            nn.Dropout(dropout),
             nn.Linear(hidden_size, self._observation_size),
         )
         # store initial states that have been encountered in the past
@@ -202,6 +208,9 @@ class Simulator(nn.Module, EnvInteractor):
             self.train()
             train_loss = 0.
             for initial_observations, actions, observations, rewards in train_dataloader:
+                if len(initial_observations) == 1:
+                    # avoid batches of size 1 due to batchnorm issues
+                    continue
                 # train on batch
                 optimiser.zero_grad()
 
