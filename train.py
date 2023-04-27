@@ -28,7 +28,7 @@ if __name__ == "__main__":
         help="wandb project name"
     ).add_argument(
         name="domain_name",
-        default="cartpole",
+        default="cartpole", 
         help="mujoco domain name"
     ).add_argument(
         name="task_name",
