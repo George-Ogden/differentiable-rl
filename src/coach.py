@@ -63,9 +63,9 @@ class Coach:
         self.agent.eval()
         self.save_agent(0)
         self.save_simulator(0)
+        experience_history = []
         for iteration in range(self.num_iterations):
             # gather experience using agent
-            experience_history = []
             for episode in trange(self.agent_env_experiences, desc="Collecting experience in environment"):
                 episode_history = []
                 timestep = self.env.reset()

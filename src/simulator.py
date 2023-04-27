@@ -158,7 +158,7 @@ class Simulator(nn.Module, EnvInteractor):
         # convert raw experiences into dataset
         initial_observations = [
             timestep.observation for episode in experience_history
-            for timestep, _ in [episode.pop(0)]
+            for timestep, _ in episode[:1]
         ]
         # use initial states for running simulations
         self.initial_observations.extend(initial_observations)
@@ -169,7 +169,7 @@ class Simulator(nn.Module, EnvInteractor):
             *zip(*(
                 zip(*(
                     (action, timestep.observation, timestep.reward)
-                    for timestep, action in episode
+                    for timestep, action in episode[1:]
                 ))
                 for episode in experience_history
             ))
