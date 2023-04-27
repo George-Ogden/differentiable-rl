@@ -5,7 +5,7 @@ from tqdm import tqdm, trange
 import wandb
 import os
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Union
 
 from .simulator import Simulator, SimulatorConfig
@@ -29,9 +29,9 @@ class CoachConfig(Config):
     """directory to save logs, model, files, etc. to"""
     sub_directories: str = "iteration-{iteration:04}"
     best_checkpoint_path: str = "best"
-    agent_config: AgentConfig = AgentConfig()
-    simulator_config: SimulatorConfig = SimulatorConfig()
-    training_config: TrainingConfig = TrainingConfig()
+    agent_config: AgentConfig = field(default_factory=AgentConfig)
+    simulator_config: SimulatorConfig = field(default_factory=SimulatorConfig)
+    training_config: TrainingConfig = field(default_factory=TrainingConfig)
 
     def __post_init__(self):
         assert self.agent_env_experiences > 1, "`agent_env_experiences` must be greater than 1 (batch norm errors)"

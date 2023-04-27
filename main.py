@@ -1,41 +1,39 @@
-from src.simulator import Simulator
-from src.agent import Agent
+from src.coach import Coach, CoachConfig
+from src.utils import ParserBuilder
 from src.env import MujocoEnv
 
-import numpy as np
-import torch
 import wandb
 
-# load environment
-env = MujocoEnv("cartpole", "swingup")
-# create agent
-agent = Agent(env.spec).to("cuda")
-# create simulator
-simulator = Simulator(env.spec).to("cuda")
+def main(args):
+    # load environment
+    env = MujocoEnv("cartpole", "swingup")
 
-wandb.init(project="simulator")
+    wandb.init(project=args.project_name, dir=args.save_directory)
+    wandb.config.update(args)
 
-for iteration in range(5):
-    agent.eval()
-    # gather experience using agent
-    experience_history = []
-    for episode in range(10):
-        episode_history = []
-        timestep = env.reset()
-        episode_history.append((timestep, None))
+    coach_config = CoachConfig.from_args(args)
 
-        while not timestep.last():
-            action = agent(timestep.observation)
-            timestep = env.step(action)
-            episode_history.append((timestep, action))
+    coach = Coach(
+        env,
+        config=coach_config
+    )
+    coach.run()
 
-        experience_history.append(episode_history)
-    rewards = [
-        sum([(timestep.reward or 0.) for timestep, _ in episode_history])
-    ]
-    wandb.log({"env_reward": np.mean(rewards)})
-
-    # train simulator
-    simulator.fit(experience_history)
-    agent.learn(simulator)
-    torch.save(agent, "agent.pth")
+if __name__ == "__main__":
+    parser = ParserBuilder().add_dataclass(
+        CoachConfig()
+    ).add_argument(
+        name="project_name",
+        default="simulator",
+        help="wandb project name"
+    ).add_argument(
+        name="domain_name",
+        default="cartpole",
+        help="mujoco domain name"
+    ).add_argument(
+        name="task_name",
+        default="swingup",
+        help="mujoco task name"
+    ).build()
+    args = parser.parse_args()
+    main(args)
