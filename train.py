@@ -8,7 +8,7 @@ def main(args):
     # load environment
     env = MujocoEnv("cartpole", "swingup")
 
-    wandb.init(project=args.project_name, dir=args.save_directory)
+    wandb.init(project=args.project_name, dir=args.save_directory, config=args)
     wandb.config.update(args)
 
     coach_config = CoachConfig.from_args(args)
