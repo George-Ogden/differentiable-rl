@@ -34,7 +34,7 @@ class Simulator(nn.Module, EnvInteractor):
             nn.BatchNorm1d(self._observation_size),
             nn.Linear(self._observation_size, hidden_size),
             nn.ReLU(),
-            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(hidden_size, hidden_size * 2),
             nn.Dropout(dropout)
         )
         self._action_encoder = torch.nn.Sequential(
@@ -44,7 +44,7 @@ class Simulator(nn.Module, EnvInteractor):
             nn.Linear(hidden_size, hidden_size),
             nn.Dropout(dropout)
         )
-        self._rnn = nn.GRU(hidden_size, hidden_size, batch_first=True)
+        self._rnn = nn.LSTM(hidden_size, hidden_size, batch_first=True)
         self._reward_decoder = torch.nn.Sequential(
             nn.Dropout(dropout),
             nn.Linear(hidden_size, 1),
@@ -92,7 +92,7 @@ class Simulator(nn.Module, EnvInteractor):
             dtype=torch.float32
         )
         # encode the starting states
-        self._hidden_states = self._state_encoder(starting_states).unsqueeze(0)
+        self._hidden_states = self._state_encoder(starting_states).reshape(2, 1, batch_size, -1)
         return starting_states
 
     def step(self, actions: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
@@ -111,8 +111,8 @@ class Simulator(nn.Module, EnvInteractor):
         action_encodings = action_encodings.unsqueeze(1)
 
         # pass through RNN
-        output_states, self._hidden_states = self._rnn(action_encodings, self._hidden_states)
-        self._hidden_states = self._hidden_states.detach() * (1 - self.discount) + self._hidden_states * self.discount
+        output_states, self._hidden_states = self._rnn(action_encodings, tuple(self._hidden_states))
+        self._hidden_states = [state.detach() * (1 - self.discount) + state * self.discount for state in self._hidden_states]
 
         # decode outputs
         output_states = output_states.reshape(-1, output_states.shape[-1])
@@ -140,13 +140,13 @@ class Simulator(nn.Module, EnvInteractor):
         actions = actions.to(self.device)
 
         # encode inputs
-        hidden_states = self._state_encoder(initial_observations).unsqueeze(0)
+        hidden_states = self._state_encoder(initial_observations).reshape(2, 1, np.prod(batch_shape[:-1]), -1)
         actions = actions.reshape(-1, self._action_size)
         action_encodings = self._action_encoder(actions)
         action_encodings = action_encodings.reshape(*batch_shape, action_encodings.shape[-1])
 
         # pass through RNN
-        output_states, _ = self._rnn(action_encodings, hidden_states)
+        output_states, _ = self._rnn(action_encodings, tuple(hidden_states))
 
         # decode outputs
         output_states = output_states.reshape(-1, output_states.shape[-1])
