@@ -1,7 +1,7 @@
 import numpy as np
 import random
 
-from typing import Any, List, Tuple
+from typing import Any, List, Tuple, Union
 
 from .sumtree import SumTree
 
@@ -18,29 +18,26 @@ class Buffer:
     def _get_priority(self, error):
         return (np.abs(error) + self.e) ** self.a
 
-    def add(self, error: float, sample: Any):
+    def add(self, error: Union[float, List[float]], sample: Union[Any, List[Any]]):
         """store a sample in the buffer"""
+        error = np.array(error)
+        if error.ndim == 0:
+            error = np.array([error])
+            sample = np.array([sample])
         p = self._get_priority(error)
         self.tree.add(p, sample)
 
     def sample(self, n: int) -> Tuple[List[Any], List[int], List[float]]:
         """sample a batch of data from experience replay"""
-        batch = []
-        idxs = []
         segment = self.tree.total() / n
-        priorities = []
 
         self.beta = np.min([1., self.beta + self.beta_increment_per_sampling])
 
-        for i in range(n):
-            a = segment * i
-            b = segment * (i + 1)
-
-            s = random.uniform(a, b)
-            (idx, p, data) = self.tree.get(s)
-            priorities.append(p)
-            batch.append(data)
-            idxs.append(idx)
+        a = segment * np.arange(n)
+        b = segment * (np.arange(n) + 1)
+        
+        s = np.random.uniform(a, b)
+        idxs, priorities, batch = self.tree.get(s)
 
         sampling_probabilities = priorities / self.tree.total()
         is_weight = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)
@@ -48,7 +45,10 @@ class Buffer:
 
         return batch, idxs, is_weight
 
-    def update(self, idx: int, error: float):
+    def update(self, idx: Union[int, List[int]], error: Union[float, List[float]]):
         """update priority of a sample"""
+        error = np.array(error).reshape(-1)
+        idx = np.array(idx).reshape(-1)
+
         p = self._get_priority(error)
         self.tree.update(idx, p)
