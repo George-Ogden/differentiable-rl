@@ -7,7 +7,7 @@ import torch
 from tqdm import trange
 import wandb
 
-from typing import Optional, List, Tuple
+from typing import Callable, List, Optional, Tuple
 from dataclasses import dataclass
 from dm_env import TimeStep
 
@@ -20,6 +20,7 @@ class SimulatorConfig(Config):
     hidden_size: int = 64
     dropout: float = .1
     discount: float = .9
+    temporary_location: str = "/tmp/model_best.pth"
 
 class Simulator(nn.Module, EnvInteractor):
     """a game that uses an RNN to predict the next state and reward"""
@@ -54,10 +55,18 @@ class Simulator(nn.Module, EnvInteractor):
             nn.Dropout(dropout),
             nn.Linear(hidden_size, self._observation_size),
         )
+        self._value_decoder = torch.nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(hidden_size, 1),
+            nn.Sigmoid(),
+        )
         # store initial states that have been encountered in the past
         self.initial_observations = []
         self.device = torch.device("cpu")
+
+        # store config
         self.discount = config.discount
+        self.temporary_location = config.temporary_location
 
     def prepare(self, *data):
         """convert data to tensors"""
@@ -156,7 +165,37 @@ class Simulator(nn.Module, EnvInteractor):
             predicted_observations = F.sigmoid(predicted_observations) * torch.diff(self._observation_range, dim=0).squeeze(0) + self._observation_range[0]
         predicted_rewards = self._reward_decoder(output_states).squeeze(-1)
         predicted_rewards = predicted_rewards.reshape(*batch_shape)
-        return predicted_observations, predicted_rewards
+        predicted_values = self._value_decoder(output_states).squeeze(-1)
+        predicted_values = predicted_values.reshape(*batch_shape)
+        return predicted_observations, predicted_rewards, predicted_values / (1 - self.discount)
+
+    def compute_loss(
+        self,
+        batch: Tuple[torch.Tensor, ...],
+        loss_fn: Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+    ) -> torch.Tensor:
+        """compute the loss on a batch of data
+
+        Args:
+            batch (Tuple[torch.Tensor, ...]): batch of data
+            loss_fn (Callable[[torch.Tensor, torch.Tensor], torch.Tensor]): loss function
+
+        Returns:
+            torch.Tensor: loss
+        """
+        initial_observations, actions, observations, rewards, values = batch
+        predicted_observations, predicted_rewards, predicted_values = self(initial_observations, actions)
+        # calculate loss
+        return loss_fn(
+            predicted_observations,
+            observations.to(predicted_observations.device)
+        ) + loss_fn(
+            predicted_rewards,
+            rewards.to(predicted_rewards.device)
+        ) + loss_fn(
+            predicted_values,
+            values.to(predicted_values.device)
+        )
 
     def fit(
         self,
@@ -173,18 +212,21 @@ class Simulator(nn.Module, EnvInteractor):
         self.initial_observations.extend(initial_observations)
 
         # convert data to tensors
-        initial_observations, actions, observations, rewards = self.prepare(
+        initial_observations, actions, observations, rewards, values = self.prepare(
             initial_observations,
             *zip(*(
+                (value := 0) or
                 zip(*(
-                    (action, timestep.observation, timestep.reward)
+                    (action, timestep.observation, timestep.reward, (value := value * self.discount + timestep.reward))
                     for timestep, action in episode[1:]
                 ))
                 for episode in experience_history
             ))
         )
+        
+        # create dataset
         dataset = torch.utils.data.TensorDataset(
-            initial_observations, actions, observations, rewards
+            initial_observations, actions, observations, rewards, values
         )
 
         # create optimiser and loss
@@ -207,26 +249,19 @@ class Simulator(nn.Module, EnvInteractor):
         )
 
         best_val_loss = float("inf")
+        # save as a precaution
+        torch.save(self.state_dict(), self.temporary_location)
         for epoch in trange(training_config.epochs, desc="Improving simulator"):
             self.train()
             train_loss = 0.
-            for initial_observations, actions, observations, rewards in train_dataloader:
+            for batch in train_dataloader:
+                initial_observations, *_ = batch
                 if len(initial_observations) == 1:
                     # avoid batches of size 1 due to batchnorm issues
                     continue
                 # train on batch
                 optimiser.zero_grad()
-
-                predicted_observations, predicted_rewards = self(initial_observations, actions)
-
-                # calculate loss
-                loss = loss_fn(
-                    predicted_observations,
-                    observations.to(predicted_observations.device)
-                ) + loss_fn(
-                    predicted_rewards,
-                    rewards.to(predicted_rewards.device)
-                )
+                loss = self.compute_loss(batch, loss_fn)
                 train_loss += loss.item()
                 loss.backward()
 
@@ -236,23 +271,15 @@ class Simulator(nn.Module, EnvInteractor):
             val_loss = 0.
             self.eval()
             with torch.no_grad():
-                for initial_observations, actions, observations, rewards in val_dataloader:
+                for batch in val_dataloader:
                     # validate on batch
-                    predicted_observations, predicted_rewards = self(initial_observations, actions)
-
-                    loss = loss_fn(
-                        predicted_observations,
-                        observations.to(predicted_observations.device)
-                    ) + loss_fn(
-                        predicted_rewards,
-                        rewards.to(predicted_rewards.device)
-                    )
+                    loss = self.compute_loss(batch, loss_fn)
                     val_loss += loss.item()
             val_loss /= len(val_dataloader) or 1.
             # save best model to temporary location
             if val_loss <= best_val_loss:
                 best_val_loss = val_loss
-                torch.save(self.state_dict(), "/tmp/best_model.pt")
+                torch.save(self.state_dict(), self.temporary_location)
             wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
         # load best model
-        self.load_state_dict(torch.load("/tmp/best_model.pt"))
+        self.load_state_dict(torch.load(self.temporary_location))

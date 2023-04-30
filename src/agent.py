@@ -30,11 +30,16 @@ class Agent(nn.Module, EnvInteractor):
         self.setup_spec(env_spec)
 
         # create the network
-        self._network = torch.nn.Sequential(
+        self._feature_extractor = torch.nn.Sequential(
             nn.BatchNorm1d(self._observation_size),
             nn.Linear(self._observation_size, config.hidden_size),
             nn.ReLU(),
             nn.Dropout(config.dropout),
+            nn.Linear(config.hidden_size, config.hidden_size),
+        )
+        self._action_head = nn.Sequential(
+            nn.Linear(config.hidden_size, config.hidden_size),
+            nn.ReLU(),
             nn.Linear(config.hidden_size, self._action_size),
             nn.Sigmoid(),
         )
@@ -65,7 +70,8 @@ class Agent(nn.Module, EnvInteractor):
         flat_observation = observation.reshape((-1, self._observation_size))
 
         # compute the actions
-        actions = self._network(flat_observation)
+        features = self._feature_extractor(flat_observation)
+        actions = self._action_head(features)
 
         # unflatten the actions
         actions = actions.reshape(*batch_shape, *self._action_shape)

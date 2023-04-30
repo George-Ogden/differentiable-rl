@@ -8,7 +8,7 @@ from .env import Env
 
 class MujocoEnv(Env):
     discount = .9
-    time_limit = 20.
+    time_limit = 30.
     timestep = .1
     def __init__(self, domain_name: str, task_name: str):
         super().__init__()
