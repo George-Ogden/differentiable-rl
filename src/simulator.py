@@ -20,6 +20,7 @@ class SimulatorConfig(Config):
     hidden_size: int = 64
     dropout: float = .1
     discount: float = .9
+    gae_lambda: float = .95
     temporary_location: str = "/tmp/model_best.pth"
 
 class Simulator(nn.Module, EnvInteractor):
@@ -66,6 +67,7 @@ class Simulator(nn.Module, EnvInteractor):
 
         # store config
         self.discount = config.discount
+        self.gae_lambda = config.gae_lambda
         self.temporary_location = config.temporary_location
 
     def prepare(self, *data):
@@ -127,8 +129,9 @@ class Simulator(nn.Module, EnvInteractor):
         output_states = output_states.reshape(-1, output_states.shape[-1])
         predicted_observations = self._state_decoder(output_states)
         predicted_rewards = self._reward_decoder(output_states).squeeze(-1)
+        predicted_values = self._value_decoder(output_states).squeeze(-1) / (1 - self.discount)
 
-        return predicted_observations, predicted_rewards
+        return predicted_observations, predicted_rewards, predicted_values
 
     def forward(
         self,
@@ -212,12 +215,11 @@ class Simulator(nn.Module, EnvInteractor):
         self.initial_observations.extend(initial_observations)
 
         # convert data to tensors
-        initial_observations, actions, observations, rewards, values = self.prepare(
+        initial_observations, actions, observations, rewards = self.prepare(
             initial_observations,
             *zip(*(
-                (value := 0) or
                 zip(*(
-                    (action, timestep.observation, timestep.reward, (value := value * self.discount + timestep.reward))
+                    (action, timestep.observation, timestep.reward)
                     for timestep, action in episode[1:]
                 ))
                 for episode in experience_history
@@ -225,8 +227,46 @@ class Simulator(nn.Module, EnvInteractor):
         )
         
         # create dataset
-        dataset = torch.utils.data.TensorDataset(
-            initial_observations, actions, observations, rewards, values
+        dataset = data.TensorDataset(
+            initial_observations, actions, observations, rewards
+        )
+
+        pre_dataloader = data.DataLoader(
+            dataset, batch_size=training_config.batch_size, shuffle=False
+        )
+        self.eval()
+        with torch.no_grad():
+            # calculate TD-lambda targets
+            *_, target_values, = zip(*[
+                self(initial_observations, actions)
+                for initial_observations, actions, *_ in pre_dataloader
+            ])
+            target_values = torch.cat(target_values, dim=0).T
+            
+            # compute rewards with GAE lambda
+            lambda_reward = target_values[-1]
+            values = torch.stack([
+                (
+                    lambda_reward := (
+                        reward + self.discount * (
+                            self.gae_lambda * lambda_reward
+                            + next_value_prediction
+                        ) - value_prediction
+                    ) - value_prediction
+                ) + value_prediction
+                for reward, value_prediction, next_value_prediction
+                in reversed(
+                    list(
+                        zip(
+                            rewards.T,
+                            target_values,
+                            torch.cat([target_values[1:], target_values[-1:]], dim=0)
+                        )
+                    )
+                )
+            ])
+        dataset = data.TensorDataset(
+            initial_observations, actions, observations, rewards, values.T
         )
 
         # create optimiser and loss
