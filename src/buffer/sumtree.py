@@ -1,19 +1,18 @@
 import numpy
 
+from typing import Any, Tuple
 
-# SumTree
-# a binary tree data structure where the parent’s value is the sum of its children
 class SumTree:
     write = 0
 
-    def __init__(self, capacity):
+    def __init__(self, capacity: int):
         self.capacity = capacity
         self.tree = numpy.zeros(2 * capacity - 1)
         self.data = numpy.zeros(capacity, dtype=object)
         self.n_entries = 0
 
-    # update to the root node
     def _propagate(self, idx, change):
+        """update to the root node"""
         parent = (idx - 1) // 2
 
         self.tree[parent] += change
@@ -21,8 +20,8 @@ class SumTree:
         if parent != 0:
             self._propagate(parent, change)
 
-    # find sample on leaf node
     def _retrieve(self, idx, s):
+        """find sample on leaf node"""
         left = 2 * idx + 1
         right = left + 1
 
@@ -34,11 +33,11 @@ class SumTree:
         else:
             return self._retrieve(right, s - self.tree[left])
 
-    def total(self):
+    def total(self) -> float:
         return self.tree[0]
 
-    # store priority and sample
-    def add(self, p, data):
+    def add(self, p: float, data: Any):
+        """store priority and sample"""
         idx = self.write + self.capacity - 1
 
         self.data[self.write] = data
@@ -51,15 +50,15 @@ class SumTree:
         if self.n_entries < self.capacity:
             self.n_entries += 1
 
-    # update priority
-    def update(self, idx, p):
+    def update(self, idx: int, p: float):
+        """update priority"""
         change = p - self.tree[idx]
 
         self.tree[idx] = p
         self._propagate(idx, change)
 
-    # get priority and sample
-    def get(self, s):
+    def get(self, s) -> Tuple[int, float, Any]:
+        """get priority and sample"""
         idx = self._retrieve(0, s)
         dataIdx = idx - self.capacity + 1
 

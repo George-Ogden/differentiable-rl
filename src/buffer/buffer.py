@@ -1,5 +1,7 @@
-import random
 import numpy as np
+import random
+
+from typing import Any, List, Tuple
 
 from .sumtree import SumTree
 
@@ -9,18 +11,20 @@ class Buffer:
     beta = 0.4
     beta_increment_per_sampling = 0.001
 
-    def __init__(self, capacity):
+    def __init__(self, capacity: int):
         self.tree = SumTree(capacity)
         self.capacity = capacity
 
     def _get_priority(self, error):
         return (np.abs(error) + self.e) ** self.a
 
-    def add(self, error, sample):
+    def add(self, error: float, sample: Any):
+        """store a sample in the buffer"""
         p = self._get_priority(error)
         self.tree.add(p, sample)
 
-    def sample(self, n):
+    def sample(self, n: int) -> Tuple[List[Any], List[int], List[float]]:
+        """sample a batch of data from experience replay"""
         batch = []
         idxs = []
         segment = self.tree.total() / n
@@ -44,6 +48,7 @@ class Buffer:
 
         return batch, idxs, is_weight
 
-    def update(self, idx, error):
+    def update(self, idx: int, error: float):
+        """update priority of a sample"""
         p = self._get_priority(error)
         self.tree.update(idx, p)
