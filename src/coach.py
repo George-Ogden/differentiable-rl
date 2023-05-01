@@ -91,13 +91,13 @@ class Coach:
             wandb.log({"env_reward": np.mean(rewards) / self.env.max_round})
 
             # train simulator
-            self.training_config.epochs = self.simulator_epochs
+            self.training_config.iterations = self.simulator_epochs
             training_buffer = training_buffer[-self.max_buffer_size:]
             self.simulator.fit(training_buffer, training_config=self.training_config)
             self.save_simulator(iteration + 1)
 
             # train agent
-            self.training_config.epochs = self.agent_sim_experiences
+            self.training_config.iterations = self.agent_sim_experiences
             self.agent.learn(self.simulator, training_config=self.training_config)
             self.save_agent(iteration + 1)
 

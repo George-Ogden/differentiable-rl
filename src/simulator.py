@@ -13,6 +13,7 @@ from dm_env import TimeStep
 
 from .utils import Config, TrainingConfig
 from .env import EnvInteractor, EnvSpec
+from .buffer import Buffer
 
 @dataclass
 class SimulatorConfig(Config):
@@ -191,14 +192,18 @@ class Simulator(nn.Module, EnvInteractor):
         # calculate loss
         return loss_fn(
             predicted_observations,
-            observations.to(predicted_observations.device)
-        ) + loss_fn(
+            observations.to(predicted_observations.device),
+            reduction="none"
+        ).mean(axis=tuple(range(1, observations.ndim))) + loss_fn(
             predicted_rewards,
-            rewards.to(predicted_rewards.device)
-        ) + loss_fn(
-            predicted_values,
-            values.to(predicted_values.device)
-        )
+            rewards.to(predicted_rewards.device),
+            reduction="none"
+        ).mean(axis=tuple(range(1, rewards.ndim))) + loss_fn(
+            # normalise values
+            predicted_values * (1 - self.discount),
+            values.to(predicted_values.device) * (1 - self.discount),
+            reduction="none"
+        ).mean(axis=tuple(range(1, values.ndim)))
 
     def fit(
         self,
@@ -231,8 +236,9 @@ class Simulator(nn.Module, EnvInteractor):
             initial_observations, actions, observations, rewards
         )
 
+        batch_size = training_config.batch_size
         pre_dataloader = data.DataLoader(
-            dataset, batch_size=training_config.batch_size, shuffle=False
+            dataset, batch_size=batch_size, shuffle=False
         )
         self.eval()
         with torch.no_grad():
@@ -281,45 +287,54 @@ class Simulator(nn.Module, EnvInteractor):
         val_dataset = data.Subset(
             dataset, indices[:int(len(dataset) * training_config.validation_split)]
         )
-        train_dataloader = data.DataLoader(
-            train_dataset, batch_size=training_config.batch_size, shuffle=True
+        pretrain_dataloader = data.DataLoader(
+            train_dataset, batch_size=batch_size, shuffle=False
         )
+        train_buffer = Buffer(
+            len(train_dataset)
+        )
+        with torch.no_grad():
+            for batch in pretrain_dataloader:
+                loss = self.compute_loss(batch, loss_fn)
+                train_buffer.add(loss.numpy(), list(zip(*batch)))
         val_dataloader = data.DataLoader(
-            val_dataset, batch_size=training_config.batch_size, shuffle=False
+            val_dataset, batch_size=batch_size, shuffle=False
         )
 
         best_val_loss = float("inf")
         # save as a precaution
         torch.save(self.state_dict(), self.temporary_location)
-        for epoch in trange(training_config.epochs, desc="Improving simulator"):
-            self.train()
-            train_loss = 0.
-            for batch in train_dataloader:
-                initial_observations, *_ = batch
-                if len(initial_observations) == 1:
-                    # avoid batches of size 1 due to batchnorm issues
-                    continue
-                # train on batch
-                optimiser.zero_grad()
-                loss = self.compute_loss(batch, loss_fn)
-                train_loss += loss.item()
-                loss.backward()
-
-                optimiser.step()
-            train_loss /= len(train_dataloader)
-
-            val_loss = 0.
-            self.eval()
+        self.train()
+        train_loss = 0.
+        for _ in trange(training_config.iterations, desc="Improving simulator"):
+            batch, ids, importances = train_buffer.sample(batch_size)
+            # prepare data
+            batch = data.default_collate(list(batch))
+            importances = torch.tensor(importances, dtype=torch.float32, device=self.device)
+            # train on batch
+            optimiser.zero_grad()
+            loss = (self.compute_loss(batch, loss_fn) * importances).sum() / importances.sum()
+            train_loss += loss.item()
+            loss.backward()
+            optimiser.step()
             with torch.no_grad():
-                for batch in val_dataloader:
-                    # validate on batch
-                    loss = self.compute_loss(batch, loss_fn)
-                    val_loss += loss.item()
-            val_loss /= len(val_dataloader) or 1.
-            # save best model to temporary location
-            if val_loss <= best_val_loss:
-                best_val_loss = val_loss
-                torch.save(self.state_dict(), self.temporary_location)
-            wandb.log({"epoch": epoch, "train_loss": train_loss, "val_loss": val_loss})
+                updated_loss = self.compute_loss(batch, loss_fn)
+                train_buffer.update(ids, updated_loss.numpy())
+        train_loss /= training_config.iterations or 1.
+
+        val_loss = 0.
+        self.eval()
+        with torch.no_grad():
+            for batch in val_dataloader:
+                # validate on batch
+                loss = self.compute_loss(batch, loss_fn).mean()
+                val_loss += loss.item()
+        val_loss /= len(val_dataloader) or 1.
+
+        # save best model to temporary location
+        if val_loss <= best_val_loss:
+            best_val_loss = val_loss
+            torch.save(self.state_dict(), self.temporary_location)
+        wandb.log({"train_loss": train_loss, "val_loss": val_loss})
         # load best model
         self.load_state_dict(torch.load(self.temporary_location))

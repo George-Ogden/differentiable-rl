@@ -95,7 +95,7 @@ class Agent(nn.Module, EnvInteractor):
         target_model.load_state_dict(self.state_dict())
         target_model.eval()
 
-        for epoch in trange(training_config.epochs, desc="Practising in simulator"):
+        for epoch in trange(training_config.iterations, desc="Practising in simulator"):
             optimizer.zero_grad()
             # reset the simulator
             observations = simulator.reset(training_config.batch_size)
@@ -107,7 +107,7 @@ class Agent(nn.Module, EnvInteractor):
                 actions = self(observations)
                 with torch.no_grad():
                     target_actions = target_model(observations)
-                observations, rewards = simulator.step(actions)
+                observations, rewards, values = simulator.step(actions)
                 divergence_loss += F.mse_loss(actions, target_actions)
                 total_reward += rewards.mean()
             # update agent

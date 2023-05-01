@@ -8,7 +8,7 @@ from .config import Config
 
 @dataclass
 class TrainingConfig(Config):
-    epochs: int = 20
+    iterations: int = 100
     batch_size: int = 1024
     """training batch size"""
     lr: float = 1e-3
