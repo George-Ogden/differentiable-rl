@@ -25,7 +25,7 @@ coach = Coach(
         evaluation_runs=1,
         simulator_epochs=4,
         training_config=TrainingConfig(
-            epochs=1,
+            iterations=1,
             batch_size=16,
             lr=1e-2,
             optimizer_type="AdamW",
@@ -64,7 +64,7 @@ def test_agent_training_config(monkeypatch):
     coach.run()
     assert len(configs) == 2
     for config in configs:
-        assert config.epochs == 3
+        assert config.iterations == 3
         assert config.batch_size == 16
         assert config.lr == 1e-2
         assert config.optimizer_type == "AdamW"
@@ -82,7 +82,7 @@ def test_simulator_training_config(monkeypatch):
     coach.run()
     assert len(configs) == 2
     for config in configs:
-        assert config.epochs == 4
+        assert config.iterations == 4
         assert config.batch_size == 16
         assert config.lr == 1e-2
         assert config.optimizer_type == "AdamW"
