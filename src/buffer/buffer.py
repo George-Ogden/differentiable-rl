@@ -23,6 +23,7 @@ class Buffer:
         if error.ndim == 0:
             error = np.array([error])
             sample = np.array([sample])
+        assert len(error) + self.tree.n_entries <= self.capacity, f"tree is full"
         p = self._get_priority(error)
         self.tree.add(p, sample)
 
@@ -34,9 +35,9 @@ class Buffer:
 
         a = segment * np.arange(n)
         b = segment * (np.arange(n) + 1)
-        
+
         s = np.random.uniform(a, b)
-        idxs, priorities, batch = self.tree.get(s)
+        idxs, priorities, batch = self.tree.get(s, unique=True)
 
         sampling_probabilities = priorities / self.tree.total()
         is_weight = np.power(self.tree.n_entries * sampling_probabilities, -self.beta)

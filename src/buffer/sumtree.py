@@ -16,8 +16,8 @@ class SumTree:
         while (idx != 0).any():
             parent = (idx - 1) // 2
             np.add.at(self.tree, parent[idx != 0], change[idx != 0])
-            idx = parent
-
+            idx = np.where(idx == 0, idx, parent)
+        
     def _retrieve(self, idx, s):
         """find sample on leaf node"""
         while ((left := idx * 2 + 1) < len(self.tree)).any():
@@ -30,7 +30,6 @@ class SumTree:
         return idx
 
     def total(self) -> float:
-        assert np.allclose(self.tree[0], np.sum(self.tree[-self.capacity:]))
         for i in range(0, len(self.tree) // 2):
             np.allclose(self.tree[i], self.tree[2 * i + 1] + self.tree[2 * i + 2])
         return self.tree[0]
@@ -38,21 +37,16 @@ class SumTree:
     def add(self, p: List[float], data: List[Any]):
         """store priority and sample"""
         idx = self.write + self.capacity - 1
-        idx = idx - np.arange(len(p))
+        idx = idx + np.arange(len(p))
 
         self.data[np.arange(len(p)) + self.write] = data
         self.update(idx, p)
 
         self.write += len(p)
-        if self.write >= self.capacity:
-            self.write = 0
-
-        if self.n_entries < self.capacity:
-            self.n_entries += 1
+        self.n_entries += len(p)
 
     def update(self, idx: List[int], p: List[float]):
         """update priority"""
-
         idx = np.array(idx).reshape(-1)
         p = np.array(p).reshape(-1)
 
@@ -61,9 +55,11 @@ class SumTree:
         self.tree[idx] = p
         self._propagate(idx, change)
 
-    def get(self, s: List[float]) -> Tuple[List[int], List[float], List[Any]]:
+    def get(self, s: List[float], unique: bool = False) -> Tuple[List[int], List[float], List[Any]]:
         """get priority and sample"""
         idx = self._retrieve(np.zeros(s.shape, dtype=int), s)
+        if unique:
+            idx = np.unique(idx)
         dataIdx = idx - self.capacity + 1
 
         return (idx, self.tree[idx], self.data[dataIdx])
