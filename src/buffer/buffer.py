@@ -23,7 +23,7 @@ class Buffer:
         if error.ndim == 0:
             error = np.array([error])
             sample = np.array([sample])
-        assert len(error) + self.tree.n_entries <= self.capacity, f"tree is full"
+        assert len(error) <= self.capacity, f"adding more entries than capacity allows"
         p = self._get_priority(error)
         self.tree.add(p, sample)
 
@@ -52,3 +52,6 @@ class Buffer:
 
         p = self._get_priority(error)
         self.tree.update(idx, p)
+    
+    def __len__(self):
+        return self.tree.n_entries

@@ -36,14 +36,15 @@ class SumTree:
 
     def add(self, p: List[float], data: List[Any]):
         """store priority and sample"""
-        idx = self.write + self.capacity - 1
-        idx = idx + np.arange(len(p))
+        idx = self.write +  np.arange(len(p))
+        idx %= self.capacity
+        idx += self.capacity - 1
 
-        self.data[np.arange(len(p)) + self.write] = data
+        self.data[idx - self.capacity + 1] = data
         self.update(idx, p)
 
         self.write += len(p)
-        self.n_entries += len(p)
+        self.n_entries = min(self.n_entries + len(p), self.capacity)
 
     def update(self, idx: List[int], p: List[float]):
         """update priority"""
