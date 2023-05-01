@@ -41,3 +41,27 @@ def test_buffer_importances():
             mapping[id] = value
             buffer.update(id, importances[value] / 2)
             importances[value] /= 2
+
+def test_full_buffer():
+    buffer = Buffer(7)
+    buffer.add(np.arange(1, 8), np.arange(1, 8, dtype=int))
+    
+    importances = {i: i for i in range(1, 8)}
+    mapping = {}
+    for _ in range(10):
+        values, ids, weights = buffer.sample(5)
+        ordering = np.argsort(weights)
+        values = np.array(values)[ordering]
+        ids = np.array(ids)[ordering]
+        weights = weights[ordering]
+        for x, y in zip(values[:-1], values[1:]):
+            assert importances[x] >= importances[y]
+
+        for id, value in zip(ids, values):
+            mapping[id] = value
+            buffer.update(id, importances[value] / 2)
+            importances[value] /= 2
+    
+    assert len(mapping) == 7
+    assert len(set(mapping.keys())) == 7
+    assert len(set(mapping.values())) == 7
