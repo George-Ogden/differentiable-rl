@@ -6,7 +6,7 @@ import wandb
 
 def main(args):
     # load environment
-    env = MujocoEnv("cartpole", "swingup")
+    env = MujocoEnv(args.domain_name, args.task_name)
 
     wandb.init(project=args.project_name, dir=args.save_directory, config=args)
     wandb.config.update(args)
