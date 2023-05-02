@@ -23,6 +23,8 @@ class SimulatorConfig(Config):
     discount: float = .9
     gae_lambda: float = .95
     temporary_location: str = "/tmp/model_best.pth"
+    buffer_size: int = 200
+    epsilon = 1e-5
 
 class Simulator(nn.Module, EnvInteractor):
     """a game that uses an RNN to predict the next state and reward"""
@@ -70,6 +72,9 @@ class Simulator(nn.Module, EnvInteractor):
         self.discount = config.discount
         self.gae_lambda = config.gae_lambda
         self.temporary_location = config.temporary_location
+
+        self.train_buffer = Buffer(config.buffer_size)
+        self.eps = config.epsilon
 
     def prepare(self, *data):
         """convert data to tensors"""
@@ -254,7 +259,7 @@ class Simulator(nn.Module, EnvInteractor):
             values = torch.stack([
                 (
                     lambda_reward := (
-                        reward + self.discount * (
+                        reward.to(self.device) + self.discount * (
                             self.gae_lambda * lambda_reward
                             + next_value_prediction
                         ) - value_prediction
@@ -290,13 +295,10 @@ class Simulator(nn.Module, EnvInteractor):
         pretrain_dataloader = data.DataLoader(
             train_dataset, batch_size=batch_size, shuffle=False
         )
-        train_buffer = Buffer(
-            len(train_dataset)
-        )
         with torch.no_grad():
             for batch in pretrain_dataloader:
                 loss = self.compute_loss(batch, loss_fn)
-                train_buffer.add(loss.numpy(), list(zip(*batch)))
+                self.train_buffer.add(loss.cpu().numpy() + self.eps, list(zip(*batch)))
         val_dataloader = data.DataLoader(
             val_dataset, batch_size=batch_size, shuffle=False
         )
@@ -307,7 +309,7 @@ class Simulator(nn.Module, EnvInteractor):
         self.train()
         train_loss = 0.
         for _ in trange(training_config.iterations, desc="Improving simulator"):
-            batch, ids, importances = train_buffer.sample(batch_size)
+            batch, ids, importances = self.train_buffer.sample(batch_size)
             # prepare data
             batch = data.default_collate(list(batch))
             importances = torch.tensor(importances, dtype=torch.float32, device=self.device)
@@ -319,7 +321,7 @@ class Simulator(nn.Module, EnvInteractor):
             optimiser.step()
             with torch.no_grad():
                 updated_loss = self.compute_loss(batch, loss_fn)
-                train_buffer.update(ids, updated_loss.numpy())
+                self.train_buffer.update(ids, updated_loss.cpu().numpy() + self.eps)
         train_loss /= training_config.iterations or 1.
 
         val_loss = 0.

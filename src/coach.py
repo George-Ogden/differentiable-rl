@@ -65,9 +65,8 @@ class Coach:
         self.agent.eval()
         self.save_agent(0)
         self.save_simulator(0)
-        training_buffer = []
         for iteration in range(self.num_iterations):
-            experience_history = []
+            training_buffer = []
             # gather experience using agent
             for episode in trange(self.agent_env_experiences, desc="Collecting experience in environment"):
                 episode_history = []
@@ -79,20 +78,18 @@ class Coach:
                     timestep = self.env.step(action)
                     episode_history.append((timestep, action))
 
-                experience_history.append(episode_history)
-            training_buffer.extend(experience_history)
+                training_buffer.append(episode_history)
             rewards = [
                 sum([
                     (timestep.reward or 0.)
                     for timestep, _ in episode_history
                 ])
-                for episode_history in experience_history
+                for episode_history in training_buffer
             ]
             wandb.log({"env_reward": np.mean(rewards) / self.env.max_round})
 
             # train simulator
             self.training_config.iterations = self.simulator_epochs
-            training_buffer = training_buffer[-self.max_buffer_size:]
             self.simulator.fit(training_buffer, training_config=self.training_config)
             self.save_simulator(iteration + 1)
 
