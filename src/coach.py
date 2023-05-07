@@ -74,7 +74,10 @@ class Coach:
                 episode_history.append((timestep, None))
 
                 while not timestep.last():
-                    action = self.agent(timestep.observation)
+                    if iteration > 0:
+                        action = self.agent(timestep.observation)
+                    else:
+                        action = np.random.uniform(low=self.env.spec.action_spec.minimum, high=self.env.spec.action_spec.maximum)
                     timestep = self.env.step(action)
                     episode_history.append((timestep, action))
 

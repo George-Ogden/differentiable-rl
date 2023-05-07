@@ -129,7 +129,6 @@ class Simulator(nn.Module, EnvInteractor):
 
         # pass through RNN
         output_states, self._hidden_states = self._rnn(action_encodings, tuple(self._hidden_states))
-        self._hidden_states = [state.detach() * (1 - self.discount) + state * self.discount for state in self._hidden_states]
 
         # decode outputs
         output_states = output_states.reshape(-1, output_states.shape[-1])

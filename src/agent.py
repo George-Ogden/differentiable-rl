@@ -19,6 +19,7 @@ class AgentConfig(Config):
     hidden_size: int = 64
     dropout: float = .1
     similarity_coeff: float = 1.
+    selection_length: int = 10
 
 class Agent(nn.Module, EnvInteractor):
     def __init__(
@@ -46,7 +47,9 @@ class Agent(nn.Module, EnvInteractor):
         self.device = torch.device("cpu")
         self.eval()
 
+        # store the config
         self.similarity_coeff = config.similarity_coeff
+        self.selection_length = config.selection_length
 
     def to(self, device: torch.device):
         # store the device
@@ -95,25 +98,36 @@ class Agent(nn.Module, EnvInteractor):
         target_model.load_state_dict(self.state_dict())
         target_model.eval()
 
+        batch_size = training_config.batch_size
+        discount = simulator.discount
+
         for epoch in trange(training_config.iterations, desc="Practising in simulator"):
             optimizer.zero_grad()
             # reset the simulator
             observations = simulator.reset(training_config.batch_size)
-            total_reward = 0.
             num_steps = int(MujocoEnv.time_limit / MujocoEnv.timestep)
-            divergence_loss = 0.
-            for _ in range(num_steps):
+            episode_lengths = torch.randint(self.selection_length, num_steps, (training_config.batch_size,), device=self.device)
+            reward_coefficients = torch.zeros((num_steps, batch_size), device=self.device)
+            reward_coefficients[:self.selection_length] = torch.stack([discount ** torch.arange(self.selection_length, device=self.device)] * batch_size, axis=1)
+            for i in range(batch_size):
+                reward_coefficients[:, i] = torch.roll(reward_coefficients[:, i], (episode_lengths[i] - self.selection_length).item())
+            
+            total_value = 0
+            divergence_loss = 0
+            for i in range(episode_lengths.max() + 1):
                 # sample actions
                 actions = self(observations)
                 with torch.no_grad():
                     target_actions = target_model(observations)
                 observations, rewards, values = simulator.step(actions)
                 divergence_loss += F.mse_loss(actions, target_actions)
-                total_reward += rewards.mean()
+                total_value += (rewards * reward_coefficients[i]).mean()
+                total_value += values[episode_lengths == i].sum() / batch_size * discount ** (self.selection_length + 1)
+
             # update agent
-            loss = -total_reward / num_steps + divergence_loss * self.similarity_coeff
+            loss = -total_value / num_steps + divergence_loss * self.similarity_coeff
             loss.backward()
 
             optimizer.step()
 
-            wandb.log({"sim_reward": total_reward.item() / num_steps})
+            wandb.log({"sim_value": total_value.item() / num_steps})
