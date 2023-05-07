@@ -1,3 +1,4 @@
+git+https://github.com/George-Ogden/utils.git
 dm_control
 dm_env
 numpy
