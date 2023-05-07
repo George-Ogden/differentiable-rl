@@ -29,7 +29,8 @@ def main(args):
 if __name__ == "__main__":
     parser = ParserBuilder().add_argument(
         name="save_directory",
-        help="directory containing the agent"
+        help="directory containing the agent",
+        required=True
     ).add_argument(
         name="domain_name",
         default="cartpole",
