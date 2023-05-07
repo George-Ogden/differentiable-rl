@@ -1,22 +1,17 @@
 import torch.nn.functional as F
 import torch.optim as optim
 
-from dataclasses import dataclass, field
-from typing import List, Optional
-
-from .config import Config
+from ml_utils import DefaultTrainingConfig
+from dataclasses import dataclass
+from typing import ClassVar
 
 @dataclass
-class TrainingConfig(Config):
+class TrainingConfig(DefaultTrainingConfig):
+    epochs: ClassVar[int] = 0
     iterations: int = 100
     batch_size: int = 1024
     """training batch size"""
-    lr: float = 1e-3
-    """model learning rate"""
-    validation_split: float = 0.1
-    """proportion of data to validate on"""
     loss: str = "mse"
-    optimizer_type: str = "Adam"
     weight_decay: float = 1e-5
 
     def optimizer(self, parameters) -> optim.Optimizer:

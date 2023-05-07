@@ -4,13 +4,14 @@ import numpy as np
 import torch
 
 from dataclasses import dataclass
+from ml_utils import Config
 from typing import Union
 
 from tqdm import trange
 import wandb
 
 from .env import EnvInteractor, EnvSpec, MujocoEnv
-from .utils import Config, TrainingConfig
+from .utils import TrainingConfig
 from .simulator import Simulator
 
 @dataclass

@@ -4,16 +4,17 @@ import torch.nn as nn
 import numpy as np
 import torch
 
+from ml_utils import Buffer
 from tqdm import trange
 import wandb
 
 from typing import Callable, List, Optional, Tuple
 from dataclasses import dataclass
+from ml_utils import Config
 from dm_env import TimeStep
 
-from .utils import Config, TrainingConfig
 from .env import EnvInteractor, EnvSpec
-from .buffer import Buffer
+from .utils import TrainingConfig
 
 @dataclass
 class SimulatorConfig(Config):

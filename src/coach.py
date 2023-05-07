@@ -6,11 +6,12 @@ import wandb
 import os
 
 from dataclasses import dataclass, field
+from ml_utils import Config
 from typing import Union
 
 from .simulator import Simulator, SimulatorConfig
-from .utils import Config, TrainingConfig
 from .agent import Agent, AgentConfig
+from .utils import TrainingConfig
 from .env import MujocoEnv
 
 @dataclass
